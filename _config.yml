@@ -10,3 +10,5 @@ github_username:  smitec
 
 # Build settings
 markdown: kramdown
+
+google_analytics: UA-72801463-1
