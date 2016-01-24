@@ -1,0 +1,15 @@
+---
+layout: post
+title:  "Welcome"
+date:   2016-01-23 21:03:16
+categories: update
+---
+
+Time for a refresh.
+
+I've moved my blog to github pages to reduce the threshold of maintaining it.
+I decided to leave all the old posts in the past and start fresh.
+
+Let's see where this leads.
+
+Elliot
