@@ -1,6 +1,6 @@
 # Site settings
 title: Elliot Smith
-email: your-email@domain.com
+email: elliot@smitec.io
 description: > # this means to ignore newlines until "baseurl:"
     Elliot Smith - programming, startups and research
 baseurl: "" # the subpath of your site, e.g. /blog/
