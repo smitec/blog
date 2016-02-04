@@ -2,7 +2,7 @@
 layout: post
 title:  "Having Matlab Talk to Rust"
 date:   4-2-2016 14:42:31
-categories: rust matlab mex
+tags: rust matlab programming
 ---
 As part of my PhD I write a lot of Matlab. 
 I am not particularly fond of Matlab but because I need to collaborate and work
@@ -42,14 +42,14 @@ cd rustlab
 
 Open up your `Cargo.toml` file and add the following lines to the end.
 
-```
+{% highlight markdown %}
 [dependencies]
 libc="0.2.4"
 
 [lib]
 name="rustlab"
 crate-type=["staticlib"]
-```
+{% endhighlight %}
 
 We ask for `libc` so we can send data between Matlab and Rust, we also declare this project as a library and say we want to build a static library. As it stands we need to create a static library which will be linked to a C file which wraps the Matlab Mex calling interface, more on that later.
 

@@ -2,7 +2,7 @@
 layout: post
 title:  "Welcome"
 date:   2016-01-23 21:03:16
-categories: update
+tags: meta
 ---
 
 Time for a refresh.
