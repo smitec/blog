@@ -8,13 +8,15 @@ tags: rust matlab programming
 As part of my PhD I write a lot of Matlab. 
 I am not particularly fond of Matlab but because I need to collaborate and work
 on older code bases I don't have much choice in the matter.
-All that aside sometimes in Matlab you'll find that things can get a little slow.
+All that aside, sometimes in Matlab you'll find that things can get a little slow.
 In my field of computational electrodynamics this is typically around the time
 we need to calculate a matrix of inductance contributions with 100 million elements.
 Because code like this is hard to vectorise we tend to write code in other languages
 like C to speed up that section of code. In Matlab land this is typically referred
 to as writing a Mex file. Mex files can be written in C, C++, Fortran and possibly
-others. As a fan of Rust I wanted to see what I could do to get Rust and Matlab
+others.
+
+As a fan of Rust I wanted to see what I could do to get Rust and Matlab
 talking to one another. It took some time to work out how it could all fit together
 but I have ported one of the older C Mex files to Rust and successfully linked them
 to Matlab. While I can't share the specifics of that code here I will work through
