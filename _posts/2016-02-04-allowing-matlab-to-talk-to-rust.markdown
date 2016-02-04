@@ -1,7 +1,7 @@
 ---
 layout: post
 title:  "Allowing Matlab to Talk to Rust"
-date:   4-2-2016 14:42:31
+date:   2016-4-2 14:42:31
 tags: rust matlab programming
 ---
 
