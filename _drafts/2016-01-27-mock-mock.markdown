@@ -1,0 +1,143 @@
+---
+layout: post
+title: "Mock Mock, who's there?"
+date: 2016-01-27 13:13
+catergories: software testing java
+---
+If you had told me 6 months ago that I would ever intentionally write a class
+like this:
+{% highlight java %}
+public class SharedPreferenceFactory {
+    public SharedPreferences getDefaultPreferences(Context context) {
+        return PreferenceManager.getDefaultSharedPreferences(context);
+    }
+}
+{% endhighlight %}
+
+I would have probably laughed and gone back to building what I can now only describe as 
+Jenga code. That is, code so tightly stacked together that one wrong move could knock
+the whole thing down.
+
+This realisation came when I actually started taking unit tests seriously. I had
+always known the value of tests and most of my code had some sort of testing associated
+with it but these days I would call what I had written end-to-end or integration tests,
+and that's being kind. What I didn't see what my tests we as coupled together as my code.
+If something was broken in one of the tests it was still a journey to work out where the
+issue had actually occurred.
+
+As part of a nerdy new years resolution, I decided to take a day or two and write 
+unit testing into an Android app I was working on. I found an [Android Codelab][ac]
+which was a useful starting point and decided to jump in.
+
+It was probably during my first set of tests that I realised my problems. Android,
+and more generally Java seems to favour [Mockito][mk] for mocking objects. I will
+admit I was initially pretty hesitant about mocking things. My thoughts had always
+been that mocking things was unneeded and dangerous because it replaced your 'real'
+code with 'fake' code and that wasn't really testing things correctly.
+
+Looking back it's clear this mindset came from the way I was writing software.
+Everything I was writing was so tangled together that even if I tried I wasn't
+testing things in isolation. Luckily for me Android forced this upon me.
+
+When writing unit tests in Android the default behaviour of anything Android 
+provides is to throw an exception. At first that seems a little insane, or at
+least that's how I felt but when you are trying to encourage true unit testing
+it is strong kick in the right direction. The message they're sending is this:
+
+> If your unit tests implicitly assume certain third party behaviour, you're asking for trouble.
+
+Anyone who has already fallen down the TDD rabbit hold will probably scoff at that
+but until then it never really sank in how coupled my code, and tests had been.
+The way to get around this exception throwing mayhem is to use mock objects.
+For those unfamiliar mocks are objects which pretend to be another class but only
+do the things you explicitly tell them to. 
+
+As an example lets look at a contrived unit test. First the tightly coupled version.
+
+{% highlight java %}
+class Adder {
+    public int addTwoOnes() {
+        SomeExternalClass instance = new SomeExternalClass();
+        return instance.getOne() + instance.getOne();
+    }
+}
+
+//... Elsewhere
+
+public void test_something() {
+    //Setup
+    Adder adder = new Adder();
+
+    //Execute
+    int result = adder.addTwoOnes();
+
+    //Verify
+    assertEquals(2, result);
+}
+{% endhighlight %}
+
+In the snippet above we have two classes we care about. One is `SomeExternalClass`
+which as its name may suggest is code we didn't write. The docs say that the version
+we are using will return `1` when we call `getOne()` and we write our code relying on
+that behaviour. Out class `Adder` in its method `addTwoOnes()` creates an instance of
+`SomeExternalClass` and adds two of the 1s it had provided us. Our test reflects
+this behaviour. The problem will appear when the developer of `SomeExternalClass`
+decides that 1 isn't cool any more and decides to return 2 instead. Sometimes this is
+intentional, sometimes new bugs are introduced, either way by creating an implicit
+coupling between `Adder` and `SomeExternalClass` your so called unit test is now 
+dependant of factors completely outside of your control. And if you cant trust your
+tests they really aren't worth writing.
+
+So how do we fix it. Let's look at another example now that better decouples the
+two classes.
+
+{% highlight java %}
+class Adder {
+    public int addTwoOnes(SomeExternalClass instance) {
+        return instance.getOne() + instance.getOne();
+    }
+}
+
+//... Elsewhere
+
+public void test_something() {
+    //Setup
+    SomeExternalClass instance = mock(new SomeExternalClass());
+    Adder adder = new Adder(instance);
+    doReturn(1).when(instance).getOne();
+
+    //Execute
+    int result = adder.addTwoOnes();
+
+    //Verify
+    verify(instance, times(2)).getOne();
+
+    assertEquals(2, result);
+}
+{% endhighlight %}
+
+In this example we are mocking the behaviour of `SomeExternalClass`. We are saying,
+this time explicitly, when `getOne()` is called on this instance of `SomeExternalClass`
+we expect it to return a 1. In our new setup the behaviour is almost identical, and the 
+test is basically the same as well. The value we have added however, is far greater.
+When we write our integration tests that don't rely on mocks
+we can be sure that our code is behaving the way it should. If `Adder` instances
+suddenly start returning 4 we know that the error is in `SomeExternalClass` and
+not our own.
+
+While this example is clearly quite contrived hopefully you can see the value and
+will take the time to look for tightly coupled code like this in your own code base.
+
+Coming all the way back to the class as the start of the post. In some cases passing
+an instance at every function call is less than ideal. In those cases we pass a 
+class similar to the Factory class we made above into our constructor. The class
+then uses that factory to generate instances. In this case we can still use our mocks.
+We now mock the factory, asking it to return a mocked instance of whatever class it 
+generates and then mock that instance's behaviour separately.
+
+There is, as always, the possibility that I've done something silly here or left
+out enough detail that things are unclear. If that's the case, let me know on twitter at [@smitec][tw].
+
+[ac]: https://codelabs.developers.google.com/codelabs/android-testing/#0
+[mk]: http://site.mockito.org/
+[tw]: https://twitter.com/smitec

@@ -86,8 +86,21 @@
     }
 }
 
+#mc_embed_signup {
+    form {
+        padding: 0;
+    }
+}
 
+.email_form {
+    display: flex;
 
+    input[type="email"] {
+        flex: 2;
+        margin-right: 5px;
+    }
+
+}
 /**
  * Site footer
  */
