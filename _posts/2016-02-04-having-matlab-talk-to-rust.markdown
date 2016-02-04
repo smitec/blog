@@ -4,6 +4,7 @@ title:  "Having Matlab Talk to Rust"
 date:   4-2-2016 14:42:31
 tags: rust matlab programming
 ---
+
 As part of my PhD I write a lot of Matlab. 
 I am not particularly fond of Matlab but because I need to collaborate and work
 on older code bases I don't have much choice in the matter.
