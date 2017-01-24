@@ -49,10 +49,11 @@ TWITTER_USERNAME = 'smitec'
 MENUITEMS = (('Blog', SITEURL),)
 
 
-STATIC_PATHS = ['images', 'extra']
+STATIC_PATHS = ['images', 'extra', 'extra/CNAME']
 
 EXTRA_PATH_METADATA = {
         'extra/custom.css': {'path': 'static/custom.css'},
+        'extra/CNAME': {'path': 'CNAME'}
 }
 
 CUSTOM_CSS = 'static/custom.css'
