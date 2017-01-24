@@ -1,0 +1,306 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link href='//fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,700,400italic' rel='stylesheet' type='text/css'>
+
+    <link rel="stylesheet" type="text/css" href="/theme/stylesheet/style.min.css">
+
+  <link rel="stylesheet" type="text/css" href="/theme/pygments/github.min.css">
+  <link rel="stylesheet" type="text/css" href="/theme/font-awesome/css/font-awesome.min.css">
+
+    <link href="/static/custom.css" rel="stylesheet">
+
+    <link href="/feeds/all.atom.xml" type="application/atom+xml" rel="alternate" title="Elliot Smith Atom">
+
+
+
+  <meta charset="utf-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="HandheldFriendly" content="True" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="" />
+
+
+<meta name="author" content="Elliot Smith" />
+<meta name="description" content="As part of my PhD I write a lot of Matlab. I am not particularly fond of Matlab but because I need to collaborate and work on older code bases I don't have much choice in the matter. All that aside, sometimes in Matlab you'll find that things can get …" />
+<meta name="keywords" content="rust, matlab, programming">
+<meta property="og:site_name" content="Elliot Smith"/>
+<meta property="og:title" content=""Allowing Matlab to Talk to Rust""/>
+<meta property="og:description" content="As part of my PhD I write a lot of Matlab. I am not particularly fond of Matlab but because I need to collaborate and work on older code bases I don't have much choice in the matter. All that aside, sometimes in Matlab you'll find that things can get …"/>
+<meta property="og:locale" content="en_US"/>
+<meta property="og:url" content="/allowing-matlab-to-talk-to-rust.html"/>
+<meta property="og:type" content="article"/>
+<meta property="article:published_time" content="2016-02-04 14:42:31+10:00"/>
+<meta property="article:modified_time" content=""/>
+<meta property="article:author" content="/author/elliot-smith.html">
+<meta property="article:section" content="misc"/>
+<meta property="article:tag" content="rust"/>
+<meta property="article:tag" content="matlab"/>
+<meta property="article:tag" content="programming"/>
+<meta property="og:image" content="">
+
+  <title>Elliot Smith &ndash; "Allowing Matlab to Talk to Rust"</title>
+
+</head>
+<body>
+  <aside>
+    <div>
+      <a href="">
+        <img src="/theme/img/profile.png" alt="" title="">
+      </a>
+      <h1><a href=""></a></h1>
+
+
+      <nav>
+        <ul class="list">
+          <li><a href="/pages/about.html#about">about</a></li>
+
+        </ul>
+      </nav>
+
+      <ul class="social">
+        <li><a class="sc-github" href="https://github.com/smitec" target="_blank"><i class="fa fa-github"></i></a></li>
+        <li><a class="sc-twitter" href="https://twitter.com/smitec" target="_blank"><i class="fa fa-twitter"></i></a></li>
+      </ul>
+    </div>
+
+
+  </aside>
+  <main>
+
+
+<article class="single">
+  <header>
+    <h1 id="allowing-matlab-to-talk-to-rust">"Allowing Matlab to Talk to Rust"</h1>
+    <p>
+          Posted on Thu 04 February 2016 in <a href="/category/misc.html">misc</a>
+
+
+    </p>
+  </header>
+
+
+  <div>
+    <p>As part of my PhD I write a lot of Matlab. 
+I am not particularly fond of Matlab but because I need to collaborate and work
+on older code bases I don't have much choice in the matter.
+All that aside, sometimes in Matlab you'll find that things can get a little slow.
+In my field of computational electrodynamics this is typically around the time
+we need to calculate a matrix of inductance contributions with 100 million elements.
+Because code like this is hard to vectorise we tend to write code in other languages
+like C to speed up that section of code. In Matlab land this is typically referred
+to as writing a Mex file. Mex files can be written in C, C++, Fortran and possibly
+others.</p>
+<p>As a fan of Rust I wanted to see what I could do to get Rust and Matlab
+talking to one another. It took some time to work out how it could all fit together
+but I have ported one of the older C Mex files to Rust and successfully linked them
+to Matlab. While I can't share the specifics of that code here I will work through
+a working example of sending data from Matlab to Rust and back again. Let's get 
+started.</p>
+<h2>My Setup</h2>
+<p>Just in case something falls apart with updates this is my current setup:</p>
+<ul>
+<li>Matlab R2015b</li>
+<li>Mac OSX 10.11.3</li>
+<li>rustc 1.5.0</li>
+<li>cargo 0.7.0</li>
+</ul>
+<h2>Step 1 - Writing a static library in Rust</h2>
+<p>This step is fairly well documented but for completeness I will start from the 
+beginning. I assume you have all of the components above installed and Matlab 
+knows what C compiler you will be using.</p>
+<p>So let's create an empty Rust project.</p>
+<div class="highlight"><pre><span></span>cargo new rustlab
+<span class="nb">cd</span> rustlab
+</pre></div>
+
+
+<p>Open up your <code>Cargo.toml</code> file and add the following lines to the end.</p>
+<div class="highlight"><pre><span></span><span class="k">[dependencies]</span>
+<span class="na">libc</span><span class="o">=</span><span class="s">&quot;0.2.4&quot;</span>
+
+<span class="k">[lib]</span>
+<span class="na">name</span><span class="o">=</span><span class="s">&quot;rustlab&quot;</span>
+<span class="na">crate-type</span><span class="o">=</span><span class="s">[&quot;staticlib&quot;]</span>
+</pre></div>
+
+
+<p>We ask for <code>libc</code> so we can send data between Matlab and Rust, we also declare this project as a library and say we want to build a static library. As it stands we need to create a static library which will be linked to a C file which wraps the Matlab Mex calling interface, more on that later.</p>
+<p>Now to write our functions. In this example we will be writing a function which takes two vectors and does an element wise multiplication on their elements. Something Matlab already does, and does quickly, but enough of an example to show the process of getting data sent both ways.</p>
+<p>In our Rust code we will be writing two functions. 
+One, which we will call <code>multiply_safe</code> is where we will use only Rust variables and do the actual computation. 
+The other <code>multiply</code> will be a wrapper, and our interface to C which takes C types, populates Rust variables with them, calls our <code>multiply_safe</code> function and then passes the result back as a C type. 
+This way we keep our Rust code and glue separate as much as possible. 
+Allowing us to test our Rust code on it's own without having to set up all the glue each time.</p>
+<h2>Step 2 - A simple function</h2>
+<p>So let's get going with implementing <code>multiply_safe</code> and writing a simple test to ensure it is doing what we want.</p>
+<p>First open up lib.rs and add the following function to the file:</p>
+<div class="highlight"><pre><span></span><span class="k">fn</span> <span class="nf">multiply_safe</span><span class="p">(</span><span class="n">a</span><span class="w"> </span>: <span class="nb">Vec</span><span class="o">&lt;</span><span class="kt">f64</span><span class="o">&gt;</span><span class="p">,</span><span class="w"> </span><span class="n">b</span><span class="w"> </span>: <span class="nb">Vec</span><span class="o">&lt;</span><span class="kt">f64</span><span class="o">&gt;</span><span class="p">)</span><span class="w"> </span>-&gt; <span class="nb">Vec</span><span class="o">&lt;</span><span class="kt">f64</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="n">a</span><span class="p">.</span><span class="n">len</span><span class="p">()</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="n">b</span><span class="p">.</span><span class="n">len</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="n">panic</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;The two vectors differ in length!&quot;</span><span class="p">);</span><span class="w"></span>
+<span class="w">    </span><span class="p">}</span><span class="w"></span>
+
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="k">mut</span><span class="w"> </span><span class="n">result</span><span class="w"> </span>: <span class="nb">Vec</span><span class="o">&lt;</span><span class="kt">f64</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">vec</span><span class="o">!</span><span class="p">[</span><span class="mi">0</span><span class="k">f64</span><span class="p">;</span><span class="w"> </span><span class="n">a</span><span class="p">.</span><span class="n">len</span><span class="p">()];</span><span class="w"></span>
+
+<span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="mi">0</span><span class="p">..</span><span class="n">a</span><span class="p">.</span><span class="n">len</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="n">result</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">a</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">*</span><span class="n">b</span><span class="p">[</span><span class="n">i</span><span class="p">];</span><span class="w"></span>
+<span class="w">    </span><span class="p">}</span><span class="w"></span>
+
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="n">result</span><span class="p">;</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>Nice and simple, there should be no surprises here. Because it is good practice we will also write a test to ensure the results are indeed what we expect. Edit the default <code>it_works</code> test to look like the following:</p>
+<div class="highlight"><pre><span></span><span class="cp">#[test]</span><span class="w"></span>
+<span class="k">fn</span> <span class="nf">it_works</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">a</span><span class="w"> </span>: <span class="nb">Vec</span><span class="o">&lt;</span><span class="kt">f64</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">vec</span><span class="o">!</span><span class="p">[</span><span class="mi">1</span><span class="k">f64</span><span class="p">,</span><span class="w"> </span><span class="mi">2</span><span class="k">f64</span><span class="p">,</span><span class="w"> </span><span class="mi">3</span><span class="k">f64</span><span class="p">];</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">b</span><span class="w"> </span>: <span class="nb">Vec</span><span class="o">&lt;</span><span class="kt">f64</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">vec</span><span class="o">!</span><span class="p">[</span><span class="mi">3</span><span class="k">f64</span><span class="p">,</span><span class="w"> </span><span class="mi">2</span><span class="k">f64</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="k">f64</span><span class="p">];</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">c</span><span class="w"> </span>: <span class="nb">Vec</span><span class="o">&lt;</span><span class="kt">f64</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">multiply_safe</span><span class="p">(</span><span class="n">a</span><span class="p">,</span><span class="w"> </span><span class="n">b</span><span class="p">);</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">expected</span><span class="w"> </span>: <span class="nb">Vec</span><span class="o">&lt;</span><span class="kt">f64</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">vec</span><span class="o">!</span><span class="p">[</span><span class="mi">3</span><span class="k">f64</span><span class="p">,</span><span class="w"> </span><span class="mi">4</span><span class="k">f64</span><span class="p">,</span><span class="w"> </span><span class="mi">3</span><span class="k">f64</span><span class="p">];</span><span class="w"></span>
+
+<span class="w">    </span><span class="n">assert</span><span class="o">!</span><span class="p">(</span><span class="n">c</span><span class="p">.</span><span class="n">len</span><span class="p">()</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">expected</span><span class="p">.</span><span class="n">len</span><span class="p">());</span><span class="w"></span>
+
+<span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="mi">0</span><span class="p">..</span><span class="n">c</span><span class="p">.</span><span class="n">len</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="n">assert</span><span class="o">!</span><span class="p">(</span><span class="n">c</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">expected</span><span class="p">[</span><span class="n">i</span><span class="p">]);</span><span class="w"></span>
+<span class="w">    </span><span class="p">}</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>Now if you run <code>cargo test</code> you should see our test passing. The other thing we now have is a file called <code>librustlab.a</code> in the <code>target/debug</code> folder. It wont do anything right now because we haven't written the <code>multiply</code> function but this is were our library will end up.</p>
+<h2>Step 3 - A C wrapper</h2>
+<p>Now let's look at the function that makes the link between C and Rust. As I mentioned before we will be writing a C file which acts as a middleman between Matlab and Rust. This is clearly not ideal but in currently it appears to be the most straightforward way to get things working.</p>
+<p>Before we write this new function lets add the <code>libc</code> requirements to the top of the file.</p>
+<div class="highlight"><pre><span></span><span class="k">extern</span><span class="w"> </span><span class="k">crate</span><span class="w"> </span><span class="n">libc</span><span class="p">;</span><span class="w"></span>
+<span class="k">use</span><span class="w"> </span><span class="n">libc</span>::<span class="p">{</span><span class="n">c_double</span><span class="p">,</span><span class="w"> </span><span class="n">c_long</span><span class="p">};</span><span class="w"></span>
+</pre></div>
+
+
+<p>The C function will be passing us double pointers so we use rust's c_double
+type and c_long to pass the length of the two arrays. Next to create our exported function add the following.</p>
+<div class="highlight"><pre><span></span><span class="cp">#[no_mangle]</span><span class="w"></span>
+<span class="k">pub</span><span class="w"> </span><span class="k">extern</span><span class="w"> </span><span class="k">fn</span> <span class="nf">multiply</span><span class="p">(</span><span class="n">a_double</span><span class="w"> </span>: <span class="o">*</span><span class="k">mut</span><span class="w"> </span><span class="n">c_double</span><span class="p">,</span><span class="w"> </span>
+<span class="w">                    </span><span class="n">b_double</span><span class="w"> </span>: <span class="o">*</span><span class="k">mut</span><span class="w"> </span><span class="n">c_double</span><span class="p">,</span><span class="w"> </span>
+<span class="w">                    </span><span class="n">c_double</span><span class="w"> </span>: <span class="o">*</span><span class="k">mut</span><span class="w"> </span><span class="n">c_double</span><span class="p">,</span><span class="w"></span>
+<span class="w">                    </span><span class="n">elements</span><span class="w"> </span>: <span class="nc">c_long</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">size</span><span class="w"> </span>: <span class="kt">usize</span> <span class="o">=</span><span class="w"> </span><span class="n">elements</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="kt">usize</span><span class="p">;</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="k">mut</span><span class="w"> </span><span class="n">a</span><span class="w"> </span>: <span class="nb">Vec</span><span class="o">&lt;</span><span class="kt">f64</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">vec</span><span class="o">!</span><span class="p">[</span><span class="mi">0</span><span class="k">f64</span><span class="p">;</span><span class="w"> </span><span class="n">size</span><span class="p">];</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="k">mut</span><span class="w"> </span><span class="n">b</span><span class="w"> </span>: <span class="nb">Vec</span><span class="o">&lt;</span><span class="kt">f64</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">vec</span><span class="o">!</span><span class="p">[</span><span class="mi">0</span><span class="k">f64</span><span class="p">;</span><span class="w"> </span><span class="n">size</span><span class="p">];</span><span class="w"></span>
+
+<span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="mi">0</span><span class="p">..</span><span class="n">size</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="k">unsafe</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">            </span><span class="n">a</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">*</span><span class="p">(</span><span class="n">a_double</span><span class="p">.</span><span class="n">offset</span><span class="p">(</span><span class="n">i</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="kt">isize</span><span class="p">))</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="kt">f64</span><span class="p">;</span><span class="w"></span>
+<span class="w">            </span><span class="n">b</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">*</span><span class="p">(</span><span class="n">b_double</span><span class="p">.</span><span class="n">offset</span><span class="p">(</span><span class="n">i</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="kt">isize</span><span class="p">))</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="kt">f64</span><span class="p">;</span><span class="w"></span>
+<span class="w">        </span><span class="p">}</span><span class="w"></span>
+<span class="w">    </span><span class="p">}</span><span class="w"></span>
+
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">c</span><span class="w"> </span>: <span class="nb">Vec</span><span class="o">&lt;</span><span class="kt">f64</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">multiply_safe</span><span class="p">(</span><span class="n">a</span><span class="p">,</span><span class="w"> </span><span class="n">b</span><span class="p">);</span><span class="w"></span>
+
+<span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="mi">0</span><span class="p">..</span><span class="n">size</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="k">unsafe</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">            </span><span class="o">*</span><span class="n">c_double</span><span class="p">.</span><span class="n">offset</span><span class="p">(</span><span class="n">i</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="kt">isize</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">c</span><span class="p">[</span><span class="n">i</span><span class="p">];</span><span class="w"></span>
+<span class="w">        </span><span class="p">}</span><span class="w"></span>
+<span class="w">    </span><span class="p">}</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>Some things to note here. First up <code>#[no_mangle]</code> this tells rust to keep the 
+function name the same so we can link to it, typically it gets mangled to 
+reduce the risk of two things having the same name. Next <code>pub extern</code> is needed
+to make sure the function is publicly exported. The last thing worth noting is
+the <code>unsafe</code> block. We use one of these to mark where potentially unsafe things
+might happen (like dereferencing pointers). Hopefully the rest of the function
+is clear enough. Build the code again and we will move on to writing the final
+piece of the puzzle.</p>
+<h2>Part 4 - Some C code</h2>
+<p>Create a new file <code>rustlab.c</code> and add the following code. If you have used the
+mex interface before it should be pretty straightforward.</p>
+<div class="highlight"><pre><span></span><span class="cp">#include</span> <span class="cpf">&quot;mex.h&quot;</span><span class="cp"></span>
+
+<span class="c1">// Multiplies a and b element wise, and puts the result in c</span>
+<span class="k">extern</span> <span class="kt">void</span> <span class="nf">multiply</span><span class="p">(</span><span class="kt">double</span><span class="o">*</span> <span class="n">a</span><span class="p">,</span> <span class="kt">double</span><span class="o">*</span> <span class="n">b</span><span class="p">,</span> <span class="kt">double</span><span class="o">*</span> <span class="n">c</span><span class="p">,</span> <span class="kt">long</span> <span class="n">elements</span><span class="p">);</span>
+
+<span class="kt">void</span> <span class="nf">mexFunction</span><span class="p">(</span><span class="kt">int</span> <span class="n">nlhs</span><span class="p">,</span> <span class="n">mxArray</span> <span class="o">*</span><span class="n">plhs</span><span class="p">[],</span> 
+        <span class="kt">int</span> <span class="n">nrhs</span><span class="p">,</span> <span class="k">const</span> <span class="n">mxArray</span> <span class="o">*</span><span class="n">prhs</span><span class="p">[])</span> <span class="p">{</span>
+    <span class="kt">double</span><span class="o">*</span> <span class="n">a</span><span class="p">;</span>
+    <span class="kt">double</span><span class="o">*</span> <span class="n">b</span><span class="p">;</span>
+    <span class="kt">double</span><span class="o">*</span> <span class="n">c</span><span class="p">;</span>
+
+    <span class="n">mwSize</span> <span class="n">elements</span><span class="p">;</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">nrhs</span> <span class="o">!=</span> <span class="mi">2</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">mexErrMsgTxt</span><span class="p">(</span><span class="s">&quot;Wrong number of input args&quot;</span><span class="p">);</span>
+    <span class="p">}</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">nlhs</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">mexErrMsgTxt</span><span class="p">(</span><span class="s">&quot;Wrong number of output args&quot;</span><span class="p">);</span>
+    <span class="p">}</span>
+
+    <span class="n">a</span> <span class="o">=</span> <span class="n">mxGetPr</span><span class="p">(</span><span class="n">prhs</span><span class="p">[</span><span class="mi">0</span><span class="p">]);</span>
+    <span class="n">b</span> <span class="o">=</span> <span class="n">mxGetPr</span><span class="p">(</span><span class="n">prhs</span><span class="p">[</span><span class="mi">1</span><span class="p">]);</span>
+    <span class="n">elements</span> <span class="o">=</span> <span class="n">mxGetM</span><span class="p">(</span><span class="n">prhs</span><span class="p">[</span><span class="mi">0</span><span class="p">]);</span>
+
+    <span class="n">plhs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">mxCreateDoubleMatrix</span><span class="p">(</span><span class="n">elements</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">mxREAL</span><span class="p">);</span>
+    <span class="n">c</span> <span class="o">=</span> <span class="n">mxGetPr</span><span class="p">(</span><span class="n">plhs</span><span class="p">[</span><span class="mi">0</span><span class="p">]);</span>
+
+    <span class="n">multiply</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">c</span><span class="p">,</span> <span class="n">elements</span><span class="p">);</span>
+<span class="p">}</span>
+</pre></div>
+
+
+<p>Now that both of these are done, open up Matlab and move to a folder that 
+contains both <code>librustlab.a</code> and <code>rustlab.c</code>. While in Matlab run the following.</p>
+<div class="highlight"><pre><span></span><span class="n">mex</span> <span class="n">rustlab</span><span class="p">.</span><span class="n">c</span> <span class="n">librustlab</span><span class="p">.</span><span class="n">a</span>
+<span class="n">a</span> <span class="p">=</span> <span class="mi">1</span><span class="p">:</span><span class="mi">10</span><span class="p">;</span>
+<span class="n">c</span> <span class="p">=</span> <span class="n">rustlab</span><span class="p">(</span><span class="n">a</span><span class="o">&#39;</span><span class="p">,</span> <span class="n">a</span><span class="o">&#39;</span><span class="p">);</span>
+<span class="nb">disp</span><span class="p">(</span><span class="n">c</span><span class="p">);</span>
+</pre></div>
+
+
+<p>Woohoo! You did it. Hopefully this made things clear and helps in some way. 
+While I am probably not considered an expert in rust I am happy to help out
+if you get in touch with me via twitter <a href="https://twitter.com/smitec">@smitec</a>.</p>
+<p>I plan over time to move more of my mex files to Rust. It offers a lot in terms
+of safety and high level concepts that can be more difficult to achieve in C.</p>
+<p>All of the code related to this post is available on Github: <a href="https://github.com/smitec/rustlab">rustlab</a> and
+so if things are broken on your system feel free to post an issue or pull request.</p>
+  </div>
+  <div class="tag-cloud">
+    <p>
+      <a href="/tag/rust.html">rust</a>
+      <a href="/tag/matlab.html">matlab</a>
+      <a href="/tag/programming.html">programming</a>
+    </p>
+  </div>
+
+
+
+
+</article>
+
+    <footer>
+<p>&copy; Elliot Smith </p>
+<p>    Powered by <a href="http://getpelican.com" target="_blank">Pelican</a> - <a href="https://github.com/alexandrevicenzi/flex" target="_blank">Flex</a> theme by <a href="http://alexandrevicenzi.com" target="_blank">Alexandre Vicenzi</a>
+</p>    </footer>
+  </main>
+
+
+
+
+
+<script type="application/ld+json">
+{
+  "@context" : "http://schema.org",
+  "@type" : "Blog",
+  "name": " Elliot Smith ",
+  "url" : "",
+  "image": "",
+  "description": ""
+}
+</script>
+</body>
+</html>
