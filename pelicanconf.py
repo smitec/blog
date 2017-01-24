@@ -23,9 +23,6 @@ TRANSLATION_FEED_ATOM = None
 AUTHOR_FEED_ATOM = None
 AUTHOR_FEED_RSS = None
 
-# Blogroll
-LINKS = ()
-
 # Social widget
 SOCIAL = (
         ('github', 'https://github.com/smitec'),
@@ -40,13 +37,9 @@ DEFAULT_PAGINATION = 10
 THEME = '/home/smitec/pelican-themes/Flex/'
 
 
-SIDEBAR_DIGEST = 'Programmer and Web Developer'
-
 DISPLAY_PAGES_ON_MENU = True
 
-TWITTER_USERNAME = 'smitec'
-
-MENUITEMS = (('Blog', SITEURL),)
+LINKS = (('Blog', SITEURL),)
 
 
 STATIC_PATHS = ['images', 'extra', 'extra/CNAME']
