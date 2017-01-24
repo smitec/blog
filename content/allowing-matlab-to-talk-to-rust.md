@@ -1,9 +1,6 @@
----
-layout: post
 title:  "Allowing Matlab to Talk to Rust"
 date:   2016-02-04 14:42:31 +1000
-tags: rust matlab programming
----
+tags: rust, matlab, programming
 
 As part of my PhD I write a lot of Matlab. 
 I am not particularly fond of Matlab but because I need to collaborate and work
@@ -38,21 +35,19 @@ knows what C compiler you will be using.
 
 So let's create an empty Rust project.
 
-{% highlight bash %}
-cargo new rustlab
-cd rustlab
-{% endhighlight %}
+    :::bash
+    cargo new rustlab
+    cd rustlab
 
 Open up your `Cargo.toml` file and add the following lines to the end.
 
-{% highlight markdown %}
-[dependencies]
-libc="0.2.4"
+    :::toml
+    [dependencies]
+    libc="0.2.4"
 
-[lib]
-name="rustlab"
-crate-type=["staticlib"]
-{% endhighlight %}
+    [lib]
+    name="rustlab"
+    crate-type=["staticlib"]
 
 We ask for `libc` so we can send data between Matlab and Rust, we also declare this project as a library and say we want to build a static library. As it stands we need to create a static library which will be linked to a C file which wraps the Matlab Mex calling interface, more on that later.
 
@@ -70,42 +65,38 @@ So let's get going with implementing `multiply_safe` and writing a simple test t
 
 First open up lib.rs and add the following function to the file:
 
-{% highlight rust %}
+    :::rust
+    fn multiply_safe(a : Vec<f64>, b : Vec<f64>) -> Vec<f64> {
+        if a.len() != b.len() {
+            panic!("The two vectors differ in length!");
+        }
 
-fn multiply_safe(a : Vec<f64>, b : Vec<f64>) -> Vec<f64> {
-    if a.len() != b.len() {
-        panic!("The two vectors differ in length!");
+        let mut result : Vec<f64> = vec![0f64; a.len()];
+        
+        for i in 0..a.len() {
+            result[i] = a[i]*b[i];
+        }
+
+        return result;
     }
 
-    let mut result : Vec<f64> = vec![0f64; a.len()];
-    
-    for i in 0..a.len() {
-        result[i] = a[i]*b[i];
-    }
-
-    return result;
-}
-
-{% endhighlight %}
 
 Nice and simple, there should be no surprises here. Because it is good practice we will also write a test to ensure the results are indeed what we expect. Edit the default `it_works` test to look like the following:
 
-{% highlight rust %}
-#[test]
-fn it_works() {
-    let a : Vec<f64> = vec![1f64, 2f64, 3f64];
-    let b : Vec<f64> = vec![3f64, 2f64, 1f64];
-    let c : Vec<f64> = multiply_safe(a, b);
-    let expected : Vec<f64> = vec![3f64, 4f64, 3f64];
+    :::rust 
+    #[test]
+    fn it_works() {
+        let a : Vec<f64> = vec![1f64, 2f64, 3f64];
+        let b : Vec<f64> = vec![3f64, 2f64, 1f64];
+        let c : Vec<f64> = multiply_safe(a, b);
+        let expected : Vec<f64> = vec![3f64, 4f64, 3f64];
 
-    assert!(c.len() == expected.len());
-    
-    for i in 0..c.len() {
-        assert!(c[i] == expected[i]);
+        assert!(c.len() == expected.len());
+        
+        for i in 0..c.len() {
+            assert!(c[i] == expected[i]);
+        }
     }
-}
-
-{% endhighlight %}
 
 Now if you run `cargo test` you should see our test passing. The other thing we now have is a file called `librustlab.a` in the `target/debug` folder. It wont do anything right now because we haven't written the `multiply` function but this is were our library will end up.
 
@@ -115,41 +106,39 @@ Now let's look at the function that makes the link between C and Rust. As I ment
 
 Before we write this new function lets add the `libc` requirements to the top of the file.
 
-{% highlight rust %}
-extern crate libc;
-use libc::{c_double, c_long};
-{% endhighlight %}
+    :::rust
+    extern crate libc;
+    use libc::{c_double, c_long};
 
 The C function will be passing us double pointers so we use rust's c_double
 type and c_long to pass the length of the two arrays. Next to create our exported function add the following.
 
-{% highlight rust %}
-#[no_mangle]
-pub extern fn multiply(a_double : *mut c_double, 
-                    b_double : *mut c_double, 
-                    c_double : *mut c_double,
-                    elements : c_long) {
-    
-    let size : usize = elements as usize;
-    let mut a : Vec<f64> = vec![0f64; size];
-    let mut b : Vec<f64> = vec![0f64; size];
+    :::rust
+    #[no_mangle]
+    pub extern fn multiply(a_double : *mut c_double, 
+                        b_double : *mut c_double, 
+                        c_double : *mut c_double,
+                        elements : c_long) {
+        
+        let size : usize = elements as usize;
+        let mut a : Vec<f64> = vec![0f64; size];
+        let mut b : Vec<f64> = vec![0f64; size];
 
-    for i in 0..size {
-        unsafe {
-            a[i] = *(a_double.offset(i as isize)) as f64;
-            b[i] = *(b_double.offset(i as isize)) as f64;
+        for i in 0..size {
+            unsafe {
+                a[i] = *(a_double.offset(i as isize)) as f64;
+                b[i] = *(b_double.offset(i as isize)) as f64;
+            }
+        }
+
+        let c : Vec<f64> = multiply_safe(a, b);
+
+        for i in 0..size {
+            unsafe {
+                *c_double.offset(i as isize) = c[i];
+            }
         }
     }
-
-    let c : Vec<f64> = multiply_safe(a, b);
-
-    for i in 0..size {
-        unsafe {
-            *c_double.offset(i as isize) = c[i];
-        }
-    }
-}
-{% endhighlight %}
 
 Some things to note here. First up `#[no_mangle]` this tells rust to keep the 
 function name the same so we can link to it, typically it gets mangled to 
@@ -164,48 +153,46 @@ piece of the puzzle.
 Create a new file `rustlab.c` and add the following code. If you have used the
 mex interface before it should be pretty straightforward.
 
-{% highlight c %}
-#include "mex.h"
+    :::c
+    #include "mex.h"
 
-// Multiplies a and b element wise, and puts the result in c
-extern void multiply(double* a, double* b, double* c, long elements);
+    // Multiplies a and b element wise, and puts the result in c
+    extern void multiply(double* a, double* b, double* c, long elements);
 
-void mexFunction(int nlhs, mxArray *plhs[], 
-        int nrhs, const mxArray *prhs[]) {
-    double* a;
-    double* b;
-    double* c;
+    void mexFunction(int nlhs, mxArray *plhs[], 
+            int nrhs, const mxArray *prhs[]) {
+        double* a;
+        double* b;
+        double* c;
 
-    mwSize elements;
+        mwSize elements;
 
-    if (nrhs != 2) {
-        mexErrMsgTxt("Wrong number of input args");
+        if (nrhs != 2) {
+            mexErrMsgTxt("Wrong number of input args");
+        }
+
+        if (nlhs != 1) {
+            mexErrMsgTxt("Wrong number of output args");
+        }
+
+        a = mxGetPr(prhs[0]);
+        b = mxGetPr(prhs[1]);
+        elements = mxGetM(prhs[0]);
+
+        plhs[0] = mxCreateDoubleMatrix(elements, 1, mxREAL);
+        c = mxGetPr(plhs[0]);
+
+        multiply(a, b, c, elements);
     }
-
-    if (nlhs != 1) {
-        mexErrMsgTxt("Wrong number of output args");
-    }
-
-    a = mxGetPr(prhs[0]);
-    b = mxGetPr(prhs[1]);
-    elements = mxGetM(prhs[0]);
-
-    plhs[0] = mxCreateDoubleMatrix(elements, 1, mxREAL);
-    c = mxGetPr(plhs[0]);
-
-    multiply(a, b, c, elements);
-}
-{% endhighlight %}
 
 Now that both of these are done, open up Matlab and move to a folder that 
 contains both `librustlab.a` and `rustlab.c`. While in Matlab run the following.
 
-{% highlight matlab %}
-mex rustlab.c librustlab.a
-a = 1:10;
-c = rustlab(a', a');
-disp(c);
-{% endhighlight %}
+    :::matlab
+    mex rustlab.c librustlab.a
+    a = 1:10;
+    c = rustlab(a', a');
+    disp(c);
 
 Woohoo! You did it. Hopefully this made things clear and helps in some way. 
 While I am probably not considered an expert in rust I am happy to help out
