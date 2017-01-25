@@ -5,7 +5,7 @@ from __future__ import unicode_literals
 
 AUTHOR = 'Elliot Smith'
 SITETITLE = 'Elliot Smith'
-SITEURL = 'https://smitec.io'
+SITEURL = '/'
 SITESUBTITLE = 'AI & Medicine'
 SITEDESCRIPTION = 'Applications of AI in medicine as well as other related work'
 SITELOGO = '/images/profile.jpg'
@@ -39,7 +39,7 @@ THEME = '/home/smitec/pelican-themes/Flex/'
 
 DISPLAY_PAGES_ON_MENU = True
 
-LINKS = (('Blog', SITEURL),)
+LINKS = ()
 
 
 STATIC_PATHS = ['images', 'extra', 'extra/CNAME']
