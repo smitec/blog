@@ -4,7 +4,7 @@
 from __future__ import unicode_literals
 
 AUTHOR = 'Elliot Smith'
-SITETITLE = 'Elliot Smith'
+SITETITLE = SITENAME = 'Elliot Smith'
 SITEURL = '/'
 SITESUBTITLE = 'AI & Medicine'
 SITEDESCRIPTION = 'Applications of AI in medicine as well as other related work'
